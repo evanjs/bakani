@@ -17,7 +17,12 @@ pub struct MediaInfo {
 }
 
 impl MediaInfo {
-    pub fn new(media_type: MediaType, title: String, publishers: Vec<PublisherInfo>, licensed_in_english: bool) -> Self {
+    pub fn new(
+        media_type: MediaType,
+        title: String,
+        publishers: Vec<PublisherInfo>,
+        licensed_in_english: bool,
+    ) -> Self {
         MediaInfo {
             media_type,
             title,
@@ -51,7 +56,12 @@ pub struct PublisherInfo {
 }
 
 impl PublisherInfo {
-    pub fn new(publisher_type: PublisherType, name: String, vols: Option<usize>, status: Option<Status>) -> Self {
+    pub fn new(
+        publisher_type: PublisherType,
+        name: String,
+        vols: Option<usize>,
+        status: Option<Status>,
+    ) -> Self {
         PublisherInfo {
             publisher_type,
             name,
