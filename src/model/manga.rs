@@ -5,15 +5,15 @@ use strum_macros::EnumString;
 pub enum MediaType {
     Novel,
     Manga,
-    Unknown
+    Unknown,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct MediaInfo {
     media_type: MediaType,
     pub(crate) title: String,
-    publishers: Vec<PublisherInfo>,
-    licensed_in_english: bool
+    pub(crate) publishers: Vec<PublisherInfo>,
+    licensed_in_english: bool,
 }
 
 impl MediaInfo {
@@ -22,7 +22,7 @@ impl MediaInfo {
             media_type,
             title,
             publishers,
-            licensed_in_english
+            licensed_in_english,
         }
     }
 }
@@ -34,7 +34,7 @@ pub enum Status {
     Hiatus,
 }
 
-#[derive(EnumString, Debug, Serialize, Deserialize)]
+#[derive(EnumString, Debug, Serialize, Deserialize, Eq, PartialEq)]
 pub enum PublisherType {
     #[strum(serialize = "Original Publisher")]
     Original,
@@ -44,10 +44,10 @@ pub enum PublisherType {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct PublisherInfo {
-    publisher_type: PublisherType,
-    name: String,
-    vols: Option<usize>,
-    status: Option<Status>,
+    pub publisher_type: PublisherType,
+    pub name: String,
+    pub vols: Option<usize>,
+    pub status: Option<Status>,
 }
 
 impl PublisherInfo {
@@ -56,7 +56,7 @@ impl PublisherInfo {
             publisher_type,
             name,
             vols,
-            status
+            status,
         }
     }
 }

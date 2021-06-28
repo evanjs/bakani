@@ -1,13 +1,13 @@
+use std::iter::FromIterator;
 use std::str::FromStr;
 
+use reqwest::Url;
 use scraper::{ElementRef, Html, Selector};
 use selectors::Element;
 
-use std::iter::FromIterator;
+use model::manga::*;
 
 mod model;
-
-use model::manga::*;
 
 fn get_media_info(page: &Html) -> MediaInfo {
     MediaInfo::new(
@@ -49,6 +49,12 @@ fn get_title(page: &Html) -> String {
     let selector = Selector::parse(selector_raw).unwrap();
     let matches: Vec<ElementRef> = page.select(&selector).collect();
     matches.first().unwrap().text().next().unwrap().to_string()
+}
+
+pub async fn get_baka_entry(id: usize) -> reqwest::Result<String> {
+    let url = Url::from_str(format!("https://www.mangaupdates.com/series.html?id={}", id.to_string()).as_str()).unwrap();
+    let client = reqwest::Client::new();
+    client.get(url).send().await.unwrap().text().await
 }
 
 fn get_value_of_block_with_text(page: &Html, pattern: String, text_match: Option<String>) -> Option<ElementRef> {
@@ -119,6 +125,12 @@ mod tests {
 
     use super::*;
 
+    macro_rules! aw {
+    ($e:expr) => {
+        tokio_test::block_on($e)
+    };
+  }
+
     const SKIP_BEAT: &str = include_str!("../test/static/Baka-Updates Manga - Skip Beat!.html");
     const BABY_STEPS: &str = include_str!("../test/static/Baka-Updates Manga - Baby Steps.html");
     const HUNTER_X_HUNTER: &str = include_str!("../test/static/Baka-Updates Manga - Hunter x Hunter.html");
@@ -137,5 +149,17 @@ mod tests {
         assert!(!info.title.is_empty());
         println!("{}", serde_json::to_string_pretty(&info).unwrap());
         println!("{:=^1$}", format!("End {}", info.title), 30);
+    }
+
+    #[test_case(376, "Hakusensha"; "Skip Beat!")]
+    pub fn test_get_entry(id: usize, publisher: &str) -> anyhow::Result<()> {
+        let page = aw!(get_baka_entry(id))?;
+        let html = Html::parse_document(page.as_str());
+        let info = get_media_info(&html);
+        let original_publishers = info.publishers.iter().filter(|p| p.publisher_type == PublisherType::Original).collect::<Vec<_>>();
+        let first_original_publisher = original_publishers.first().unwrap();
+        assert_eq!(first_original_publisher.name, publisher);
+        println!("Validated Original Publisher for {}: {}", info.title, first_original_publisher.name);
+        Ok(())
     }
 }
