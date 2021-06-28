@@ -2,55 +2,20 @@ use std::str::FromStr;
 
 use scraper::{ElementRef, Html, Selector};
 use selectors::Element;
-use serde_derive::{Deserialize, Serialize};
-use strum_macros::EnumString;
+
 use std::iter::FromIterator;
 
-#[derive(EnumString, Debug, Serialize, Deserialize)]
-enum MediaType {
-    Novel,
-    Manga,
-    Unknown
-}
+mod model;
 
-#[derive(Debug, Serialize, Deserialize)]
-struct MediaInfo {
-    media_type: MediaType,
-    title: String,
-    publishers: Vec<PublisherInfo>,
-    licensed_in_english: bool
-}
-
-#[derive(EnumString, Debug, Serialize, Deserialize, Clone)]
-enum Status {
-    Complete,
-    Ongoing,
-    Hiatus,
-}
-
-#[derive(EnumString, Debug, Serialize, Deserialize)]
-enum PublisherType {
-    #[strum(serialize = "Original Publisher")]
-    Original,
-    #[strum(serialize = "English Publisher")]
-    English,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-struct PublisherInfo {
-    publisher_type: PublisherType,
-    name: String,
-    vols: Option<usize>,
-    status: Option<Status>,
-}
+use model::manga::*;
 
 fn get_media_info(page: &Html) -> MediaInfo {
-    MediaInfo {
-        media_type: get_media_type(page),
-        title: get_title(page),
-        publishers: get_publisher_info(page),
-        licensed_in_english: get_licensed_status(page)
-    }
+    MediaInfo::new(
+        get_media_type(page),
+        get_title(page),
+        get_publisher_info(page),
+        get_licensed_status(page),
+    )
 }
 
 fn get_media_type(page: &Html) -> MediaType {
@@ -129,12 +94,12 @@ fn get_publisher_info(page: &Html) -> Vec<PublisherInfo> {
             };
 
 
-            PublisherInfo {
+            PublisherInfo::new(
+                publisher_type,
                 name,
                 vols,
                 status,
-                publisher_type,
-            }
+            )
         }).collect::<Vec<_>>()
 }
 
