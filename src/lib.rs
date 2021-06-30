@@ -1,13 +1,15 @@
 use std::iter::FromIterator;
 use std::str::FromStr;
 
-use reqwest::Url;
+use reqwest::{Url, Client};
 use scraper::{ElementRef, Html, Selector};
 use selectors::Element;
 
 use model::manga::*;
 
 mod model;
+
+const BAKA_MAIN_URL: &str = "https://www.mangaupdates.com";
 
 fn get_media_info(page: &Html) -> MediaInfo {
     MediaInfo::new(
@@ -18,21 +20,33 @@ fn get_media_info(page: &Html) -> MediaInfo {
     )
 }
 
+fn parse_search_results(page: &Html) -> anyhow::Result<Vec<SearchResult>> {
+    let selector_text = r#"div#main_content > .p-2 > div.row > div.p-3 > div > div > div.d-flex > div.text > a"#;
+    let selector = Selector::parse(selector_text).unwrap();
+    let selector_matches: Vec<ElementRef> = page.select(&selector).collect();
+    let collected = selector_matches.iter().map(|e| {
+        let href = e.value().attr("href").unwrap().to_string();
+        let name = e.text().next().unwrap().to_string();
+        SearchResult::new(name, href)
+    }).collect::<Vec<_>>();
+    Ok(collected)
+}
+
 fn get_media_type(page: &Html) -> MediaType {
     let text = get_value_of_block_with_text(
         page,
         r#"div.sCat > b"#.to_string(),
         Some("Type".to_string()),
     )
-    .unwrap()
-    .parent_element()
-    .unwrap()
-    .next_sibling_element()
-    .unwrap()
-    .text()
-    .next()
-    .unwrap()
-    .replace("\n", "");
+        .unwrap()
+        .parent_element()
+        .unwrap()
+        .next_sibling_element()
+        .unwrap()
+        .text()
+        .next()
+        .unwrap()
+        .replace("\n", "");
     MediaType::from_str(&text).unwrap_or(MediaType::Unknown)
 }
 
@@ -42,15 +56,15 @@ fn get_licensed_status(page: &Html) -> bool {
         r#"div.sCat > b"#.to_string(),
         Some("Licensed".to_string()),
     )
-    .unwrap()
-    .parent_element()
-    .unwrap()
-    .next_sibling_element()
-    .unwrap()
-    .text()
-    .next()
-    .unwrap()
-    .replace("\n", "");
+        .unwrap()
+        .parent_element()
+        .unwrap()
+        .next_sibling_element()
+        .unwrap()
+        .text()
+        .next()
+        .unwrap()
+        .replace("\n", "");
     match text.as_str() {
         "Yes" => true,
         "No" => false,
@@ -80,17 +94,30 @@ fn get_title(page: &Html) -> String {
     matches.first().unwrap().text().next().unwrap().to_string()
 }
 
+pub async fn get_baka_search_results(query: String) -> anyhow::Result<Vec<SearchResult>> {
+    let search_results = search_baka_title(query).await.unwrap();
+    let html = Html::parse_document(search_results.as_str());
+    parse_search_results(&html)
+}
+
 pub async fn get_baka_entry(id: usize) -> reqwest::Result<String> {
-    let url = Url::from_str(
-        format!(
-            "https://www.mangaupdates.com/series.html?id={}",
-            id.to_string()
-        )
-        .as_str(),
-    )
-    .unwrap();
+    let url = format!("{}/series.html", BAKA_MAIN_URL);
     let client = reqwest::Client::new();
-    client.get(url).send().await.unwrap().text().await
+    client.get(url).query(&[("id", id)]).send().await.unwrap().text().await
+}
+
+pub async fn search_baka_title_post(query: String) -> reqwest::Result<String> {
+    let client = Client::new();
+    let url = format!("{}/series.html", BAKA_MAIN_URL);
+    let request = client.post(url).form(&[("search", query)]);
+    request.send().await?.text().await
+}
+
+pub async fn search_baka_title(query: String) -> reqwest::Result<String> {
+    let client = Client::new();
+    let url = format!("{}/series.html", BAKA_MAIN_URL);
+    let request = client.get(url).query(&[("search", query)]);
+    request.send().await?.text().await
 }
 
 fn get_value_of_block_with_text(
@@ -192,6 +219,7 @@ mod tests {
     const HAGANAI_NOVEL: &str = include_str!(
         "../test/static/Baka-Updates Manga - Boku wa Tomodachi ga Sukunai (Novel).html"
     );
+    const HIGEHIRO_SEARCH: &str = include_str!("../test/static/HigeHiro/Baka-Updates Manga - Series.html");
 
     #[test_case(SKIP_BEAT)]
     #[test_case(BABY_STEPS)]
@@ -223,6 +251,27 @@ mod tests {
             "Validated Original Publisher for {}: {}",
             info.title, first_original_publisher.name
         );
+        Ok(())
+    }
+
+    #[test_case("Skip Beat!", 376)]
+    pub fn test_search_series(title: &str, id: usize) -> anyhow::Result<()> {
+        let results = aw!(get_baka_search_results(title.to_string()));
+        assert!(results.is_ok());
+        let serialized = serde_json::to_string_pretty(&results.unwrap())?;
+        println!("{}", serialized);
+
+        Ok(())
+    }
+
+    #[test_case(HIGEHIRO_SEARCH)]
+    pub fn test_parse_series_search_results(page: &str) -> anyhow::Result<()> {
+        let html = Html::parse_document(page);
+        let results = parse_search_results(&html);
+        assert!(results.is_ok());
+        let serialized = serde_json::to_string_pretty(&results.unwrap())?;
+        println!("{}", serialized);
+
         Ok(())
     }
 }

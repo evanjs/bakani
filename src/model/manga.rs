@@ -16,6 +16,18 @@ pub struct MediaInfo {
     licensed_in_english: bool,
 }
 
+#[derive(Debug, Serialize, Deserialize)]
+pub struct SearchResult {
+    name: String,
+    href: String
+}
+
+impl SearchResult {
+    pub fn new(name: String, href: String) -> Self {
+        SearchResult { name, href }
+    }
+}
+
 impl MediaInfo {
     pub fn new(
         media_type: MediaType,
