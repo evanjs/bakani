@@ -1,0 +1,9 @@
+name: bakani
+args:
+  - INPUT:
+      about: The query on which to operate (search, etc.)
+      required: true
+      index: 1
+  - search:
+      about: Search for the provided query
+      short: s
