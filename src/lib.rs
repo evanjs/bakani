@@ -7,6 +7,8 @@ use selectors::Element;
 
 use model::manga::*;
 
+use anyhow;
+
 mod model;
 
 const BAKA_MAIN_URL: &str = "https://www.mangaupdates.com";
@@ -94,8 +96,8 @@ fn get_title(page: &Html) -> String {
     matches.first().unwrap().text().next().unwrap().to_string()
 }
 
-pub async fn get_baka_search_results(query: String) -> anyhow::Result<Vec<SearchResult>> {
-    let search_results = search_baka_title(query).await.unwrap();
+pub async fn search_baka_title(query: String) -> anyhow::Result<Vec<SearchResult>> {
+    let search_results = request_baka_title(query).await?;
     let html = Html::parse_document(search_results.as_str());
     parse_search_results(&html)
 }
@@ -106,14 +108,14 @@ pub async fn get_baka_entry(id: usize) -> reqwest::Result<String> {
     client.get(url).query(&[("id", id)]).send().await.unwrap().text().await
 }
 
-pub async fn search_baka_title_post(query: String) -> reqwest::Result<String> {
+pub async fn request_baka_title_post(query: String) -> reqwest::Result<String> {
     let client = Client::new();
     let url = format!("{}/series.html", BAKA_MAIN_URL);
     let request = client.post(url).form(&[("search", query)]);
     request.send().await?.text().await
 }
 
-pub async fn search_baka_title(query: String) -> reqwest::Result<String> {
+pub async fn request_baka_title(query: String) -> reqwest::Result<String> {
     let client = Client::new();
     let url = format!("{}/series.html", BAKA_MAIN_URL);
     let request = client.get(url).query(&[("search", query)]);
@@ -256,7 +258,7 @@ mod tests {
 
     #[test_case("Skip Beat!", 376)]
     pub fn test_search_series(title: &str, id: usize) -> anyhow::Result<()> {
-        let results = aw!(get_baka_search_results(title.to_string()));
+        let results = aw!(search_baka_title(title.to_string()));
         assert!(results.is_ok());
         let serialized = serde_json::to_string_pretty(&results.unwrap())?;
         println!("{}", serialized);
