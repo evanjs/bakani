@@ -11,215 +11,222 @@ pub mod model;
 
 const BAKA_MAIN_URL: &str = "https://www.mangaupdates.com";
 
-fn get_media_info(page: &Html) -> MediaInfo {
-    MediaInfo::new(
-        get_media_type(page),
-        get_title(page),
-        get_publisher_info(page),
-        get_licensed_status(page),
-    )
+#[derive(Debug, Clone)]
+pub struct BakaClient {
+    client: Client,
 }
 
-fn parse_search_results(page: &Html) -> anyhow::Result<Vec<SearchResult>> {
-    let selector_text = r#"main#mu-main > div > div:nth-of-type(2) > div > div:last-of-type > div div div > [title="Click for Series Info"]"#;
-    let selector = Selector::parse(selector_text).unwrap();
-    let selector_matches: Vec<ElementRef> = page.select(&selector).collect();
-    let collected = selector_matches.iter().map(|e| {
-        let href = e.value().attr("href").unwrap().to_string();
-        let name = e.text().next().unwrap().to_string();
-        SearchResult::new(name, href)
-    }).collect::<Vec<_>>();
-    Ok(collected)
-}
-
-fn get_media_type(page: &Html) -> MediaType {
-    let text = get_value_of_block_with_text(
-        page,
-        r#"[data-cy="info-box-type-header"] > b"#.to_string(),
-        Some("Type".to_string()),
-    )
-        .unwrap()
-        .parent_element()
-        .unwrap()
-        .next_sibling_element()
-        .unwrap()
-        .text()
-        .next()
-        .unwrap()
-        .replace("\n", "");
-    MediaType::from_str(&text).unwrap_or(MediaType::Unknown)
-}
-
-fn get_licensed_status(page: &Html) -> bool {
-    let text = get_value_of_block_with_text(
-        page,
-        r#"div[data-cy="info-box-licensed-header"] > b"#.to_string(),
-        Some("Licensed".to_string()),
-    )
-        .unwrap()
-        .parent_element()
-        .unwrap()
-        .next_sibling_element()
-        .unwrap()
-        .text()
-        .next()
-        .unwrap()
-        .replace("\n", "");
-    match text.as_str() {
-        "Yes" => true,
-        "No" => false,
-        _ => false,
+impl BakaClient {
+    pub fn new() -> Self {
+        Self { client: Client::new() }
     }
-}
+    fn get_media_info(&self, page: &Html) -> MediaInfo {
+        MediaInfo::new(
+            self.get_media_type(page),
+            self.get_title(page),
+            self.get_publisher_info(page),
+            self.get_licensed_status(page),
+        )
+    }
 
-fn get_volume_details(fragment: &str) -> (Option<usize>, Option<Status>) {
-    let bounds: Vec<_> = fragment.chars().take_while(|c| c != &')').collect();
-    let finals: String = String::from_iter(bounds);
-    let cleaned = finals.replace("(", "").replace(")", "");
-    let splits = cleaned
-        .split_ascii_whitespace()
-        .map(|s| s.to_owned())
-        .collect::<Vec<String>>();
-    let status = splits
-        .last()
-        .and_then(|status_text| Status::from_str(status_text).ok());
-    let vols = splits.first().and_then(|x| str::parse::<usize>(x).ok());
-    (vols, status)
-}
-
-fn get_title(page: &Html) -> String {
-    let selector_raw = r#".releasestitle, tabletitle"#;
-    let selector = Selector::parse(selector_raw).unwrap();
-    let matches: Vec<ElementRef> = page.select(&selector).collect();
-    matches.first().unwrap().text().next().unwrap().to_string()
-}
-
-pub async fn search_for_baka_title(query: String) -> anyhow::Result<Vec<SearchResult>> {
-    let search_results = search_baka_title(&query).await?;
-    let html = Html::parse_document(search_results.as_str());
-    parse_search_results(&html)
-}
-
-pub async fn search_and_get_baka_entry(query: &str) -> anyhow::Result<MediaInfo> {
-    let search_results = search_for_baka_title(query.to_string()).await?;
-    let first = search_results.first().unwrap();
-    let baka_entry = get_baka_entry_from_url(&first.href).await?;
-    let html = Html::parse_document(baka_entry.as_str());
-    let info = get_media_info(&html);
-
-    Ok(info)
-}
-
-pub async fn get_baka_entry(id: &str) -> reqwest::Result<String> {
-    let mut url = Url::parse(&format!("{}", BAKA_MAIN_URL)).unwrap();
-    url.path_segments_mut()
-        .unwrap()
-        .push("series")
-        .push(id);
-    let client = reqwest::Client::new();
-    client.get(url).query(&[("id", id)]).send().await?.text().await
-}
-
-pub async fn get_baka_entry_from_url(url: &str) -> reqwest::Result<String> {
-    let client = reqwest::Client::new();
-    client.get(url).send().await?.text().await
-}
-
-pub async fn request_baka_title_post(query: String) -> reqwest::Result<String> {
-    let client = Client::new();
-    let url = format!("{}/series.html", BAKA_MAIN_URL);
-    let request = client.post(url).form(&[("search", query)]);
-    request.send().await?.text().await
-}
-
-pub async fn search_baka_title(query: &str) -> reqwest::Result<String> {
-    let client = Client::new();
-    let mut url = Url::parse(&format!("{}", BAKA_MAIN_URL)).unwrap();
-    url.path_segments_mut()
-        .unwrap()
-        .push("site")
-        .push("search")
-        .push("result");
-    let request = client.get(url).query(&[("search", query)]);
-    request.send().await?.text().await
-}
-
-fn get_value_of_block_with_text(
-    page: &Html,
-    pattern: String,
-    text_match: Option<String>,
-) -> Option<ElementRef> {
-    let selector = Selector::parse(&pattern).unwrap();
-    let selector_matches: Vec<ElementRef> = page.select(&selector).collect();
-    let matches: Vec<_> = match text_match {
-        None => selector_matches.to_vec(),
-        Some(t) => selector_matches
-            .iter()
-            .cloned()
-            .filter(|e| {
-                let element = e.text().next().map(|x| x.to_string());
-                match element {
-                    Some(text) => text.contains(&t),
-                    _ => false,
-                }
-            })
-            .collect(),
-    };
-
-    let cloned = matches.clone();
-    let first = cloned.first();
-    first.cloned()
-}
-
-fn get_publisher_info(page: &Html) -> Vec<PublisherInfo> {
-    let serialization_status = get_serialization_status(page);
-
-    let selector_raw = r#"div[data-cy="info-box-original_publisher"] > div"#;
-    let selector = Selector::parse(selector_raw).unwrap();
-    let matches: Vec<ElementRef> = page.select(&selector).collect();
-    matches
-        .iter()
-        .map(|e| {
-            let publisher_type_text = &e
-                .parent_element()
-                .unwrap()
-                .prev_sibling_element()
-                .unwrap()
-                .text()
-                .next()
-                .unwrap();
-            let publisher_type: PublisherType =
-                PublisherType::from_str(publisher_type_text).unwrap();
+    fn parse_search_results(&self, page: &Html) -> anyhow::Result<Vec<SearchResult>> {
+        let selector_text = r#"main#mu-main > div > div:nth-of-type(2) > div > div:last-of-type > div div div > [title="Click for Series Info"]"#;
+        let selector = Selector::parse(selector_text).unwrap();
+        let selector_matches: Vec<ElementRef> = page.select(&selector).collect();
+        let collected = selector_matches.iter().map(|e| {
+            let href = e.value().attr("href").unwrap().to_string();
             let name = e.text().next().unwrap().to_string();
+            SearchResult::new(name, href)
+        }).collect::<Vec<_>>();
+        Ok(collected)
+    }
 
-            let (vols, status) = match publisher_type {
-                PublisherType::Original => serialization_status.clone(),
-                PublisherType::English => {
-                    get_volume_details(e.next_sibling().unwrap().value().as_text().unwrap())
-                }
-            };
+    fn get_media_type(&self, page: &Html) -> MediaType {
+        let text = self.get_value_of_block_with_text(
+            page,
+            r#"[data-cy="info-box-type-header"] > b"#.to_string(),
+            Some("Type".to_string()),
+        )
+            .unwrap()
+            .parent_element()
+            .unwrap()
+            .next_sibling_element()
+            .unwrap()
+            .text()
+            .next()
+            .unwrap()
+            .replace("\n", "");
+        MediaType::from_str(&text).unwrap_or(MediaType::Unknown)
+    }
 
-            PublisherInfo::new(publisher_type, name, vols, status)
-        })
-        .collect::<Vec<_>>()
-}
+    fn get_licensed_status(&self, page: &Html) -> bool {
+        let text = self.get_value_of_block_with_text(
+            page,
+            r#"div[data-cy="info-box-licensed-header"] > b"#.to_string(),
+            Some("Licensed".to_string()),
+        )
+            .unwrap()
+            .parent_element()
+            .unwrap()
+            .next_sibling_element()
+            .unwrap()
+            .text()
+            .next()
+            .unwrap()
+            .replace("\n", "");
+        match text.as_str() {
+            "Yes" => true,
+            "No" => false,
+            _ => false,
+        }
+    }
 
-fn get_serialization_status(page: &Html) -> (Option<usize>, Option<Status>) {
-    let serialization_status_selector_raw = r#"div[data-cy="info-box-status-header"] > b"#;
-    let serialization_status = get_value_of_block_with_text(
-        page,
-        serialization_status_selector_raw.to_string(),
-        Some("Status".to_string()),
-    );
-    serialization_status.map_or((None, None), |x| {
-        x.parent_element().map_or((None, None), |y| {
-            y.next_sibling_element().map_or((None, None), |n| {
-                n.text()
+    fn get_volume_details(&self, fragment: &str) -> (Option<usize>, Option<Status>) {
+        let bounds: Vec<_> = fragment.chars().take_while(|c| c != &')').collect();
+        let finals: String = String::from_iter(bounds);
+        let cleaned = finals.replace("(", "").replace(")", "");
+        let splits = cleaned
+            .split_ascii_whitespace()
+            .map(|s| s.to_owned())
+            .collect::<Vec<String>>();
+        let status = splits
+            .last()
+            .and_then(|status_text| Status::from_str(status_text).ok());
+        let vols = splits.first().and_then(|x| str::parse::<usize>(x).ok());
+        (vols, status)
+    }
+
+    fn get_title(&self, page: &Html) -> String {
+        let selector_raw = r#".releasestitle, tabletitle"#;
+        let selector = Selector::parse(selector_raw).unwrap();
+        let matches: Vec<ElementRef> = page.select(&selector).collect();
+        matches.first().unwrap().text().next().unwrap().to_string()
+    }
+
+    pub async fn search_for_baka_title(&self, query: String) -> anyhow::Result<Vec<SearchResult>> {
+        let search_results = self.search_baka_title(&query).await?;
+        let html = Html::parse_document(search_results.as_str());
+        self.parse_search_results(&html)
+    }
+
+    pub async fn search_and_get_baka_entry(&self, query: &str) -> anyhow::Result<MediaInfo> {
+        let search_results = self.search_for_baka_title(query.to_string()).await?;
+        let first = search_results.first().unwrap();
+        let baka_entry = self.get_baka_entry_from_url(&first.href).await?;
+        let html = Html::parse_document(baka_entry.as_str());
+        let info = self.get_media_info(&html);
+
+        Ok(info)
+    }
+
+    pub async fn get_baka_entry(&self, id: &str) -> reqwest::Result<String> {
+        let mut url = Url::parse(&format!("{}", BAKA_MAIN_URL)).unwrap();
+        url.path_segments_mut()
+            .unwrap()
+            .push("series")
+            .push(id);
+        self.client.get(url).query(&[("id", id)]).send().await?.text().await
+    }
+
+    pub async fn get_baka_entry_from_url(&self, url: &str) -> reqwest::Result<String> {
+        self.client.get(url).send().await?.text().await
+    }
+
+    pub async fn request_baka_title_post(&self, query: String) -> reqwest::Result<String> {
+        let url = format!("{}/series.html", BAKA_MAIN_URL);
+        let request = self.client.post(url).form(&[("search", query)]);
+        request.send().await?.text().await
+    }
+
+    pub async fn search_baka_title(&self, query: &str) -> reqwest::Result<String> {
+        let mut url = Url::parse(&format!("{}", BAKA_MAIN_URL)).unwrap();
+        url.path_segments_mut()
+            .unwrap()
+            .push("site")
+            .push("search")
+            .push("result");
+        let request = self.client.get(url).query(&[("search", query)]);
+        request.send().await?.text().await
+    }
+
+    fn get_value_of_block_with_text<'a>(
+        &self,
+        page: &'a Html,
+        pattern: String,
+        text_match: Option<String>,
+    ) -> Option<ElementRef<'a>> {
+        let selector = Selector::parse(&pattern).unwrap();
+        let selector_matches: Vec<ElementRef> = page.select(&selector).collect();
+        let matches: Vec<_> = match text_match {
+            None => selector_matches.to_vec(),
+            Some(t) => selector_matches
+                .iter()
+                .cloned()
+                .filter(|e| {
+                    let element = e.text().next().map(|x| x.to_string());
+                    match element {
+                        Some(text) => text.contains(&t),
+                        _ => false,
+                    }
+                })
+                .collect(),
+        };
+
+        let cloned = matches.clone();
+        let first = cloned.first();
+        first.cloned()
+    }
+
+    fn get_publisher_info(&self, page: &Html) -> Vec<PublisherInfo> {
+        let serialization_status = self.get_serialization_status(page);
+
+        let selector_raw = r#"div[data-cy="info-box-original_publisher"] > div"#;
+        let selector = Selector::parse(selector_raw).unwrap();
+        let matches: Vec<ElementRef> = page.select(&selector).collect();
+        matches
+            .iter()
+            .map(|e| {
+                let publisher_type_text = &e
+                    .parent_element()
+                    .unwrap()
+                    .prev_sibling_element()
+                    .unwrap()
+                    .text()
                     .next()
-                    .map_or((None, None), |status| get_volume_details(status))
+                    .unwrap();
+                let publisher_type: PublisherType =
+                    PublisherType::from_str(publisher_type_text).unwrap();
+                let name = e.text().next().unwrap().to_string();
+
+                let (vols, status) = match publisher_type {
+                    PublisherType::Original => serialization_status.clone(),
+                    PublisherType::English => {
+                        self.get_volume_details(e.next_sibling().unwrap().value().as_text().unwrap())
+                    }
+                };
+
+                PublisherInfo::new(publisher_type, name, vols, status)
+            })
+            .collect::<Vec<_>>()
+    }
+
+    fn get_serialization_status(&self, page: &Html) -> (Option<usize>, Option<Status>) {
+        let serialization_status_selector_raw = r#"div[data-cy="info-box-status-header"] > b"#;
+        let serialization_status = self.get_value_of_block_with_text(
+            page,
+            serialization_status_selector_raw.to_string(),
+            Some("Status".to_string()),
+        );
+        serialization_status.map_or((None, None), |x| {
+            x.parent_element().map_or((None, None), |y| {
+                y.next_sibling_element().map_or((None, None), |n| {
+                    n.text()
+                        .next()
+                        .map_or((None, None), |status| self.get_volume_details(status))
+                })
             })
         })
-    })
+    }
 }
 
 #[cfg(test)]
@@ -253,8 +260,9 @@ mod tests {
     #[test_case(HAGANAI_MANGA)]
     #[test_case(HAGANAI_NOVEL)]
     pub fn test_publisher_info(page: &str) {
+        let baka_client = BakaClient::new();
         let html = Html::parse_document(page);
-        let info = get_media_info(&html);
+        let info = baka_client.get_media_info(&html);
         println!("{:=^1$}", format!("Start {}", info.title), 30);
         assert!(!info.title.is_empty());
         println!("{}", serde_json::to_string_pretty(&info).unwrap());
@@ -263,9 +271,10 @@ mod tests {
 
     #[test_case(&"qlygvts", "Hakusensha"; "Skip Beat!")]
     pub fn test_get_entry(id: &str, publisher: &str) {
-        let page = aw!(get_baka_entry(id)).unwrap();
+        let baka_client = BakaClient::new();
+        let page = aw!(baka_client.clone().get_baka_entry(id)).unwrap();
         let html = Html::parse_document(page.as_str());
-        let info = get_media_info(&html);
+        let info = baka_client.get_media_info(&html);
         let original_publishers = info
             .publishers
             .iter()
@@ -283,7 +292,8 @@ mod tests {
 
     #[test_case("Skip Beat!", &"qlygvts")]
     pub fn test_search_series(title: &str, id: &str) {
-        let results = aw!(search_for_baka_title(title.to_string()));
+        let baka_client = BakaClient::new();
+        let results = aw!(baka_client.search_for_baka_title(title.to_string()));
         assert!(results.is_ok());
         let results = results.unwrap();
         assert_ne!(results.is_empty(), true, "Results should not be empty.");
@@ -304,8 +314,9 @@ mod tests {
     #[test_case(HIGEHIRO_SEARCH)]
     #[test_case(SKIP_BEAT_SEARCH)]
     pub fn test_parse_series_search_results(page: &str) {
+        let baka_client = BakaClient::new();
         let html = Html::parse_document(page);
-        let results = parse_search_results(&html);
+        let results = baka_client.parse_search_results(&html);
         assert!(results.is_ok());
         let serialized = serde_json::to_string_pretty(&results.unwrap()).unwrap();
         println!("{}", serialized);

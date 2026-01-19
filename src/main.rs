@@ -1,6 +1,6 @@
 use clap::{crate_version, crate_name, crate_authors, crate_description};
 use tracing::{error};
-use bakani::get_baka_entry_from_url;
+use bakani::BakaClient;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -24,7 +24,8 @@ async fn main() -> anyhow::Result<()> {
         .get_matches();
 
     let query: String = matches.value_of_t_or_exit("INPUT");
-    bakani::search_and_get_baka_entry(&query).await.and_then( |r| {
+    let client = BakaClient::new();
+    client.search_and_get_baka_entry(&query).await.and_then( |r| {
         println!("Results: {}", r);
         Ok(())
     }).map_err(|e| {
