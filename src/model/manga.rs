@@ -1,6 +1,8 @@
+use std::fmt::Display;
 use serde_derive::{Deserialize, Serialize};
 use strum_macros::EnumString;
 
+#[derive(strum_macros::Display)]
 #[derive(EnumString, Debug, Serialize, Deserialize)]
 pub enum MediaType {
     Novel,
@@ -16,10 +18,26 @@ pub struct MediaInfo {
     licensed_in_english: bool,
 }
 
+impl Display for MediaInfo {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let publishers = self.publishers.iter().map(|p| {
+            let maybe_vols = p.vols.map(|v| v.to_string()).or_else(|| Some("N/A".to_string())).unwrap();
+            let maybe_status = p.status.clone().map(|s| s.to_string()).or_else(|| Some("N/A".to_string())).unwrap();
+            format!("{} ({:?}) - Volumes: {} ({})", p.name, p.publisher_type, maybe_vols, maybe_status)
+        }).collect::<Vec<String>>().join("\n");
+        writeln!(f, "Title: {}\nMedia Type: {}\nPublishers:\n{}\nLicensed in English: {}",
+                 self.title,
+                 self.media_type,
+                 publishers,
+                 self.licensed_in_english
+        )
+    }
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 pub struct SearchResult {
-    name: String,
-    href: String
+    pub name: String,
+    pub href: String
 }
 
 impl SearchResult {
@@ -44,6 +62,7 @@ impl MediaInfo {
     }
 }
 
+#[derive(strum_macros::Display)]
 #[derive(EnumString, Debug, Serialize, Deserialize, Clone)]
 pub enum Status {
     Complete,
