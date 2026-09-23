@@ -30,6 +30,14 @@ impl BakaClient {
         )
     }
 
+    /// Parses the search results page and returns a vector of [SearchResult] structs
+    ///
+    /// # Arguments
+    ///
+    /// * `page`: The raw HTML of the search page to parse
+    ///
+    /// returns: Result<Vec<SearchResult, Global>, Error>
+    ///
     fn parse_search_results(&self, page: &Html) -> anyhow::Result<Vec<SearchResult>> {
         let selector_text = r#"main#mu-main > div > div:nth-of-type(2) > div > div:last-of-type > div div div > [title="Click for Series Info"]"#;
         let selector = Selector::parse(selector_text).unwrap();
