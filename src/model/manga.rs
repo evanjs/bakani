@@ -16,6 +16,7 @@ pub struct MediaInfo {
     pub(crate) title: String,
     pub(crate) publishers: Vec<PublisherInfo>,
     licensed_in_english: bool,
+    pub(crate) adaptation: String
 }
 
 impl Display for MediaInfo {
@@ -25,11 +26,19 @@ impl Display for MediaInfo {
             let maybe_status = p.status.clone().map(|s| s.to_string()).or_else(|| Some("N/A".to_string())).unwrap();
             format!("{} ({:?}) - Volumes: {} ({})", p.name, p.publisher_type, maybe_vols, maybe_status)
         }).collect::<Vec<String>>().join("\n");
-        writeln!(f, "Title: {}\nMedia Type: {}\nPublishers:\n{}\nLicensed in English: {}",
-                 self.title,
-                 self.media_type,
-                 publishers,
-                 self.licensed_in_english
+        let title = self.title.clone();
+        let media_type = &self.media_type;
+        let licensed_in_english = self.licensed_in_english;
+        let adaptation = self.adaptation.clone();
+        writeln!(f, r#"
+Title: {title}
+Media Type: {media_type}
+Publishers: {publishers}
+Licensed in English: {licensed_in_english}
+
+Anime Start/End Chapter
+{adaptation}
+"#,
         )
     }
 }
@@ -52,12 +61,14 @@ impl MediaInfo {
         title: String,
         publishers: Vec<PublisherInfo>,
         licensed_in_english: bool,
+        adaptation: String,
     ) -> Self {
         MediaInfo {
             media_type,
             title,
             publishers,
             licensed_in_english,
+            adaptation
         }
     }
 }

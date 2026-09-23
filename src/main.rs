@@ -26,7 +26,7 @@ async fn main() -> anyhow::Result<()> {
     let query: String = matches.value_of_t_or_exit("INPUT");
     let client = BakaClient::new();
     client.search_and_get_baka_entry(&query).await.and_then( |r| {
-        println!("Results: {}", r);
+        println!("{}", r);
         Ok(())
     }).map_err(|e| {
         error!(error =? e, "Failed to search for title: {}", query);

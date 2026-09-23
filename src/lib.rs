@@ -26,6 +26,7 @@ impl BakaClient {
             self.get_title(page),
             self.get_publisher_info(page),
             self.get_licensed_status(page),
+            self.get_anime_start_end_chapter(page)
         )
     }
 
@@ -39,6 +40,26 @@ impl BakaClient {
             SearchResult::new(name, href)
         }).collect::<Vec<_>>();
         Ok(collected)
+    }
+
+    fn get_anime_start_end_chapter(&self, page: &Html) -> String {
+        let value_element = self.get_value_of_block_with_text(
+            page,
+            r#"[data-cy="info-box-anime-header"] > b"#.to_string(),
+            Some("Anime Start/End Chapter".to_string()),
+        )
+        .unwrap()
+        .parent_element()
+        .unwrap()
+        .next_sibling_element()
+        .unwrap();
+        value_element
+            .children()
+            .filter_map(ElementRef::wrap)
+            .map(|element| element.text().collect::<String>().trim().to_string())
+            .filter(|text| !text.is_empty())
+            .collect::<Vec<_>>()
+            .join("\n")
     }
 
     fn get_media_type(&self, page: &Html) -> MediaType {
@@ -254,6 +275,8 @@ mod tests {
     const HIGEHIRO_SEARCH: &str = include_str!("../test/static/HigeHiro/Baka-Updates Manga - Series.html");
     const SKIP_BEAT_SEARCH: &str = include_str!("../test/static/SkipBeat/Baka-Updates Manga - Series.html");
 
+    const SKIP_BEAT_ADAPTATION: &str = "Starts at Vol 1, Chap 1\nEnds at Vol 11, Chap 66";
+
     #[test_case(SKIP_BEAT)]
     #[test_case(BABY_STEPS)]
     #[test_case(HUNTER_X_HUNTER)]
@@ -320,5 +343,17 @@ mod tests {
         assert!(results.is_ok());
         let serialized = serde_json::to_string_pretty(&results.unwrap()).unwrap();
         println!("{}", serialized);
+    }
+
+    #[test_case(SKIP_BEAT, SKIP_BEAT_ADAPTATION)]
+    pub fn test_anime_start_end_chapter(page: &str, adaptation_expected: &str) {
+        let baka_client = BakaClient::new();
+        let html = Html::parse_document(page);
+        let info = baka_client.get_media_info(&html);
+        println!("{:=^1$}", format!("Start {}", info.title), 30);
+        assert!(!info.adaptation.is_empty());
+        assert_eq!(adaptation_expected, info.adaptation, "Parsed adaptation value does not match expected value");
+        println!("{}", serde_json::to_string_pretty(&info.adaptation).unwrap());
+        println!("{:=^1$}", format!("End {}", info.title), 30);
     }
 }
