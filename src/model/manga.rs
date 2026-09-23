@@ -16,7 +16,7 @@ pub struct MediaInfo {
     pub(crate) title: String,
     pub(crate) publishers: Vec<PublisherInfo>,
     licensed_in_english: bool,
-    pub(crate) adaptation: String
+    pub(crate) adaptation: Option<String>
 }
 
 impl Display for MediaInfo {
@@ -29,7 +29,7 @@ impl Display for MediaInfo {
         let title = self.title.clone();
         let media_type = &self.media_type;
         let licensed_in_english = self.licensed_in_english;
-        let adaptation = self.adaptation.clone();
+        let adaptation = self.adaptation.clone().unwrap_or("N/A".into());
         writeln!(f, r#"
 Title: {title}
 Media Type: {media_type}
@@ -61,7 +61,7 @@ impl MediaInfo {
         title: String,
         publishers: Vec<PublisherInfo>,
         licensed_in_english: bool,
-        adaptation: String,
+        adaptation: Option<String>,
     ) -> Self {
         MediaInfo {
             media_type,

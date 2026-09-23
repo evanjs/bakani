@@ -42,24 +42,22 @@ impl BakaClient {
         Ok(collected)
     }
 
-    fn get_anime_start_end_chapter(&self, page: &Html) -> String {
-        let value_element = self.get_value_of_block_with_text(
+    fn get_anime_start_end_chapter(&self, page: &Html) -> Option<String> {
+        let header = self.get_value_of_block_with_text(
             page,
             r#"[data-cy="info-box-anime-header"] > b"#.to_string(),
             Some("Anime Start/End Chapter".to_string()),
-        )
-        .unwrap()
-        .parent_element()
-        .unwrap()
-        .next_sibling_element()
-        .unwrap();
-        value_element
+        )?;
+        let value = header.parent_element()?.next_sibling_element()?;
+        let text = value
             .children()
             .filter_map(ElementRef::wrap)
-            .map(|element| element.text().collect::<String>().trim().to_string())
+            .map(|child| child.text().collect::<String>().trim().to_string())
             .filter(|text| !text.is_empty())
             .collect::<Vec<_>>()
-            .join("\n")
+            .join("\n");
+        let text = text.trim().to_string();
+        (!text.is_empty()).then_some(text)
     }
 
     fn get_media_type(&self, page: &Html) -> MediaType {
@@ -275,7 +273,7 @@ mod tests {
     const HIGEHIRO_SEARCH: &str = include_str!("../test/static/HigeHiro/Baka-Updates Manga - Series.html");
     const SKIP_BEAT_SEARCH: &str = include_str!("../test/static/SkipBeat/Baka-Updates Manga - Series.html");
 
-    const SKIP_BEAT_ADAPTATION: &str = "Starts at Vol 1, Chap 1\nEnds at Vol 11, Chap 66";
+    const SKIP_BEAT_ADAPTATION: Option<&str> = Some("Starts at Vol 1, Chap 1\nEnds at Vol 11, Chap 66");
 
     #[test_case(SKIP_BEAT)]
     #[test_case(BABY_STEPS)]
@@ -346,13 +344,17 @@ mod tests {
     }
 
     #[test_case(SKIP_BEAT, SKIP_BEAT_ADAPTATION)]
-    pub fn test_anime_start_end_chapter(page: &str, adaptation_expected: &str) {
+    pub fn test_anime_start_end_chapter(page: &str, adaptation_expected: Option<&str>) {
         let baka_client = BakaClient::new();
         let html = Html::parse_document(page);
         let info = baka_client.get_media_info(&html);
         println!("{:=^1$}", format!("Start {}", info.title), 30);
-        assert!(!info.adaptation.is_empty());
-        assert_eq!(adaptation_expected, info.adaptation, "Parsed adaptation value does not match expected value");
+        assert!(!info.adaptation.is_none());
+        assert_eq!(
+            info.adaptation.as_deref(),
+            adaptation_expected,
+            "Parsed adaptation value does not match expected value"
+        );
         println!("{}", serde_json::to_string_pretty(&info.adaptation).unwrap());
         println!("{:=^1$}", format!("End {}", info.title), 30);
     }
