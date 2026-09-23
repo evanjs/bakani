@@ -159,6 +159,12 @@ impl BakaClient {
         self.client.get(url).send().await?.text().await
     }
 
+    pub async fn get_baka_info_from_url(&self, url: &str) -> anyhow::Result<MediaInfo> {
+        let baka_entry = self.get_baka_entry_from_url(url).await?;
+        let html = Html::parse_document(baka_entry.as_str());
+        Ok(self.get_media_info(&html))
+    }
+
     pub async fn request_baka_title_post(&self, query: String) -> reqwest::Result<String> {
         let url = format!("{}/series.html", BAKA_MAIN_URL);
         let request = self.client.post(url).form(&[("search", query)]);
