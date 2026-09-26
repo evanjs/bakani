@@ -1,7 +1,7 @@
 use std::iter::FromIterator;
 use std::str::FromStr;
 
-use reqwest::{Url, Client};
+use reqwest::{Client, Url};
 use scraper::{ElementRef, Html, Selector};
 use selectors::Element;
 
@@ -18,7 +18,9 @@ pub struct BakaClient {
 
 impl BakaClient {
     pub fn new() -> Self {
-        Self { client: Client::new() }
+        Self {
+            client: Client::new(),
+        }
     }
     fn get_media_info(&self, page: &Html) -> MediaInfo {
         MediaInfo::new(
@@ -26,7 +28,7 @@ impl BakaClient {
             self.get_title(page),
             self.get_publisher_info(page),
             self.get_licensed_status(page),
-            self.get_anime_start_end_chapter(page)
+            self.get_anime_start_end_chapter(page),
         )
     }
 
@@ -42,11 +44,14 @@ impl BakaClient {
         let selector_text = r#"main#mu-main > div > div:nth-of-type(2) > div > div:last-of-type > div div div > [title="Click for Series Info"]"#;
         let selector = Selector::parse(selector_text).unwrap();
         let selector_matches: Vec<ElementRef> = page.select(&selector).collect();
-        let collected = selector_matches.iter().map(|e| {
-            let href = e.value().attr("href").unwrap().to_string();
-            let name = e.text().next().unwrap().to_string();
-            SearchResult::new(name, href)
-        }).collect::<Vec<_>>();
+        let collected = selector_matches
+            .iter()
+            .map(|e| {
+                let href = e.value().attr("href").unwrap().to_string();
+                let name = e.text().next().unwrap().to_string();
+                SearchResult::new(name, href)
+            })
+            .collect::<Vec<_>>();
         Ok(collected)
     }
 
@@ -69,11 +74,12 @@ impl BakaClient {
     }
 
     fn get_media_type(&self, page: &Html) -> MediaType {
-        let text = self.get_value_of_block_with_text(
-            page,
-            r#"[data-cy="info-box-type-header"] > b"#.to_string(),
-            Some("Type".to_string()),
-        )
+        let text = self
+            .get_value_of_block_with_text(
+                page,
+                r#"[data-cy="info-box-type-header"] > b"#.to_string(),
+                Some("Type".to_string()),
+            )
             .unwrap()
             .parent_element()
             .unwrap()
@@ -87,11 +93,12 @@ impl BakaClient {
     }
 
     fn get_licensed_status(&self, page: &Html) -> bool {
-        let text = self.get_value_of_block_with_text(
-            page,
-            r#"div[data-cy="info-box-licensed-header"] > b"#.to_string(),
-            Some("Licensed".to_string()),
-        )
+        let text = self
+            .get_value_of_block_with_text(
+                page,
+                r#"div[data-cy="info-box-licensed-header"] > b"#.to_string(),
+                Some("Licensed".to_string()),
+            )
             .unwrap()
             .parent_element()
             .unwrap()
@@ -148,11 +155,14 @@ impl BakaClient {
 
     pub async fn get_baka_entry(&self, id: &str) -> reqwest::Result<String> {
         let mut url = Url::parse(&format!("{}", BAKA_MAIN_URL)).unwrap();
-        url.path_segments_mut()
-            .unwrap()
-            .push("series")
-            .push(id);
-        self.client.get(url).query(&[("id", id)]).send().await?.text().await
+        url.path_segments_mut().unwrap().push("series").push(id);
+        self.client
+            .get(url)
+            .query(&[("id", id)])
+            .send()
+            .await?
+            .text()
+            .await
     }
 
     pub async fn get_baka_entry_from_url(&self, url: &str) -> reqwest::Result<String> {
@@ -233,9 +243,8 @@ impl BakaClient {
 
                 let (vols, status) = match publisher_type {
                     PublisherType::Original => serialization_status.clone(),
-                    PublisherType::English => {
-                        self.get_volume_details(e.next_sibling().unwrap().value().as_text().unwrap())
-                    }
+                    PublisherType::English => self
+                        .get_volume_details(e.next_sibling().unwrap().value().as_text().unwrap()),
                 };
 
                 PublisherInfo::new(publisher_type, name, vols, status)
@@ -284,10 +293,13 @@ mod tests {
     const HAGANAI_NOVEL: &str = include_str!(
         "../test/static/Baka-Updates Manga - Boku wa Tomodachi ga Sukunai (Novel).html"
     );
-    const HIGEHIRO_SEARCH: &str = include_str!("../test/static/HigeHiro/Baka-Updates Manga - Series.html");
-    const SKIP_BEAT_SEARCH: &str = include_str!("../test/static/SkipBeat/Baka-Updates Manga - Series.html");
+    const HIGEHIRO_SEARCH: &str =
+        include_str!("../test/static/HigeHiro/Baka-Updates Manga - Series.html");
+    const SKIP_BEAT_SEARCH: &str =
+        include_str!("../test/static/SkipBeat/Baka-Updates Manga - Series.html");
 
-    const SKIP_BEAT_ADAPTATION: Option<&str> = Some("Starts at Vol 1, Chap 1\nEnds at Vol 11, Chap 66");
+    const SKIP_BEAT_ADAPTATION: Option<&str> =
+        Some("Starts at Vol 1, Chap 1\nEnds at Vol 11, Chap 66");
 
     #[test_case(SKIP_BEAT)]
     #[test_case(BABY_STEPS)]
@@ -316,8 +328,7 @@ mod tests {
             .filter(|p| p.publisher_type == PublisherType::Original)
             .collect::<Vec<_>>();
         let first_original_publisher = original_publishers.first();
-        let first_original_publisher = first_original_publisher
-        .unwrap();
+        let first_original_publisher = first_original_publisher.unwrap();
         assert_eq!(first_original_publisher.name, publisher);
         println!(
             "Validated Original Publisher for {}: {}",
@@ -339,8 +350,18 @@ mod tests {
         let str_segments = segments.collect::<Vec<_>>();
         let series_path_actual = str_segments.index(0);
         let series_id_actual = str_segments.index(1);
-        assert!(series_path_actual.eq(&"series"), "Input {:?} does not match expected value: {:#?}", series_path_actual, "series");
-        assert!(series_id_actual.eq(&id), "Input {:?} does not match expected value: {:#?}", series_id_actual, id);
+        assert!(
+            series_path_actual.eq(&"series"),
+            "Input {:?} does not match expected value: {:#?}",
+            series_path_actual,
+            "series"
+        );
+        assert!(
+            series_id_actual.eq(&id),
+            "Input {:?} does not match expected value: {:#?}",
+            series_id_actual,
+            id
+        );
 
         let serialized = serde_json::to_string_pretty(&results).unwrap();
         println!("{}", serialized);
@@ -369,7 +390,10 @@ mod tests {
             adaptation_expected,
             "Parsed adaptation value does not match expected value"
         );
-        println!("{}", serde_json::to_string_pretty(&info.adaptation).unwrap());
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&info.adaptation).unwrap()
+        );
         println!("{:=^1$}", format!("End {}", info.title), 30);
     }
 }

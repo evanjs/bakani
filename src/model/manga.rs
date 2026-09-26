@@ -1,9 +1,8 @@
-use std::fmt::Display;
 use serde_derive::{Deserialize, Serialize};
+use std::fmt::Display;
 use strum_macros::EnumString;
 
-#[derive(strum_macros::Display)]
-#[derive(EnumString, Debug, Serialize, Deserialize)]
+#[derive(strum_macros::Display, EnumString, Debug, Serialize, Deserialize)]
 pub enum MediaType {
     Novel,
     Manga,
@@ -16,21 +15,40 @@ pub struct MediaInfo {
     pub(crate) title: String,
     pub(crate) publishers: Vec<PublisherInfo>,
     licensed_in_english: bool,
-    pub(crate) adaptation: Option<String>
+    pub(crate) adaptation: Option<String>,
 }
 
 impl Display for MediaInfo {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let publishers = self.publishers.iter().map(|p| {
-            let maybe_vols = p.vols.map(|v| v.to_string()).or_else(|| Some("N/A".to_string())).unwrap();
-            let maybe_status = p.status.clone().map(|s| s.to_string()).or_else(|| Some("N/A".to_string())).unwrap();
-            format!("{} ({:?}) - Volumes: {} ({})", p.name, p.publisher_type, maybe_vols, maybe_status)
-        }).collect::<Vec<String>>().join("\n");
+        let publishers = self
+            .publishers
+            .iter()
+            .map(|p| {
+                let maybe_vols = p
+                    .vols
+                    .map(|v| v.to_string())
+                    .or_else(|| Some("N/A".to_string()))
+                    .unwrap();
+                let maybe_status = p
+                    .status
+                    .clone()
+                    .map(|s| s.to_string())
+                    .or_else(|| Some("N/A".to_string()))
+                    .unwrap();
+                format!(
+                    "{} ({:?}) - Volumes: {} ({})",
+                    p.name, p.publisher_type, maybe_vols, maybe_status
+                )
+            })
+            .collect::<Vec<String>>()
+            .join("\n");
         let title = self.title.clone();
         let media_type = &self.media_type;
         let licensed_in_english = self.licensed_in_english;
         let adaptation = self.adaptation.clone().unwrap_or("N/A".into());
-        writeln!(f, r#"
+        writeln!(
+            f,
+            r#"
 Title: {title}
 Media Type: {media_type}
 Publishers: {publishers}
@@ -46,7 +64,7 @@ Anime Start/End Chapter
 #[derive(Debug, Serialize, Deserialize)]
 pub struct SearchResult {
     pub name: String,
-    pub href: String
+    pub href: String,
 }
 
 impl SearchResult {
@@ -68,13 +86,12 @@ impl MediaInfo {
             title,
             publishers,
             licensed_in_english,
-            adaptation
+            adaptation,
         }
     }
 }
 
-#[derive(strum_macros::Display)]
-#[derive(EnumString, Debug, Serialize, Deserialize, Clone)]
+#[derive(strum_macros::Display, EnumString, Debug, Serialize, Deserialize, Clone)]
 pub enum Status {
     Complete,
     Ongoing,
